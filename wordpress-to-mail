@@ -1,0 +1,111 @@
+#!/usr/bin/env python3
+
+import requests
+import smtplib
+import yaml
+import os
+import time
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.header import Header
+from html2text import html2text
+from xml.dom.minidom import parseString
+
+
+processed = []
+feed_address = os.environ['FEED_ADDRESS']
+sender = os.environ['MAIL_SENDER']
+receiver = os.environ['MAIL_RECEIVER']
+host = os.environ['MAIL_HOST']
+password = os.environ['MAIL_PASSWORD']
+send_one = int(os.environ['SEND_ONE'])
+
+
+def get_text(node, tag):
+    return node.getElementsByTagName(tag)[0].firstChild.nodeValue
+
+
+def load_processed():
+    global processed
+    try:
+        with open('processed.yml', 'r') as f:
+            processed = yaml.safe_load(f.read())
+    except FileNotFoundError:
+        pass
+
+
+def update_processed(guid):
+    global processed
+    processed.append(guid)
+    with open('processed.yml', 'w') as f:
+        f.write(yaml.dump(processed))
+
+
+def get_feed_items():
+    feed = requests.get(feed_address).text
+    dom = parseString(feed)
+    return dom.getElementsByTagName('item')
+
+
+def print_post(title, link, pubDate, guid, content):
+    print('title: ', title)
+    print('link: ', link)
+    print('date: ', pubDate)
+    print('guid: ', guid)
+    print()
+    print(content)
+    print()
+    print('#' * 60)
+    print()
+
+
+def send_mail(title, pubDate, content, link):
+    message = MIMEMultipart()
+    message.set_charset('utf8')
+    message['From'] = sender
+    message['To'] = receiver
+    message['Subject'] = Header(title.encode('utf-8'), 'UTF-8').encode()
+    message['Date'] = pubDate
+    body = f'{content}\n\nRead on website:\n  {link}'
+    message.attach(MIMEText(body.encode('utf-8'), 'plain', 'UTF-8'))
+
+    session = smtplib.SMTP(host)
+    session.starttls()
+    session.login(sender, password)
+    session.sendmail(sender, [receiver], message.as_string())
+    session.quit()
+    print(f'`{title}` sent to {receiver}')
+
+
+def main():
+    load_processed()
+    for item in get_feed_items():
+        title = get_text(item, 'title')
+        link = get_text(item, 'link')
+        pubDate = get_text(item, 'pubDate')
+        guid = get_text(item, 'guid')
+        content = html2text(get_text(item, 'content:encoded')).strip()
+
+        # skip message if we have already sent it before
+        if guid in processed:
+            print(f'Skipping {guid}')
+            continue
+
+        # print message
+        print_post(title, link, pubDate, guid, content)
+
+        # send mail
+        send_mail(title, pubDate, content, link)
+
+        # save guid so we do not send the same message twice
+        update_processed(guid)
+
+        if send_one:
+            break
+        else:
+            # Don't sent mails too rapidly
+            time.sleep(10)
+
+
+if __name__ == '__main__':
+    main()
