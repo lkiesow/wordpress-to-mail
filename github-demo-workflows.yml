@@ -1,0 +1,74 @@
+name: Send News
+
+# This workflow will run every 10 minutes, check if there is a new post
+# available via the Wordpress feed and send that via email.
+#
+# The workflow will use a given git repository for storing the list of post
+# which have already been processed.
+#
+# Only one mail is sent on each run to avoid sending too many mails at once and
+# to not send mails twice if the workflow fails half-way through.
+
+on:
+  # Cron docs:
+  # https://pubs.opengroup.org/onlinepubs/9699919799/utilities/crontab.html#tag_20_25_07
+  # Here we run every 10 minutes
+  schedule:
+    - cron: '*/10 * * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: set up python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+
+      - name: install dependencies
+        run: pip install -r https://raw.githubusercontent.com/lkiesow/wordpress-to-mail/main/requirements.txt
+
+      - name: get wordpress-to-mail
+        run: |
+          curl -O https://raw.githubusercontent.com/lkiesow/wordpress-to-mail/main/wordpress-to-mail
+          chmod +x wordpress-to-mail
+
+      # prepare git so we can store in there what we have already processed
+      - name: prepare git
+        run: |
+          git config --global user.name "News Bot"
+          git config --global user.email "bot@opencast.org"
+
+      - name: prepare github ssh key
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          install -dm 700 ~/.ssh/
+          echo "${DEPLOY_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+
+      - name: clone repository
+        run: git clone "git@github.com:lkiesow/news-announcements.git" news-announcements
+
+      - name: send mails
+        env:
+          FEED_ADDRESS: https://opencast.org/feed/
+          MAIL_SENDER: ${{ secrets.MAIL_SENDER }}
+          MAIL_RECEIVER: ${{ secrets.MAIL_RECEIVER }}
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          SEND_ONE: 1
+        working-directory: news-announcements
+        run: |
+          ../wordpress-to-mail
+
+      - name: commit changes
+        working-directory: news-announcements
+        run: |
+          git commit processed.yml -m "Update on $(date)"
+
+      - name: push updates
+        working-directory: news-announcements
+        run: |
+          git push origin main
