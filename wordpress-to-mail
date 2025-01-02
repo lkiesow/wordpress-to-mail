@@ -59,8 +59,8 @@ def print_post(title, link, pubDate, guid, content):
     print()
 
 
-def send_mail(title, pubDate, content, link):
-    message = MIMEMultipart()
+def send_mail(title, pubDate, content, html_content, link):
+    message = MIMEMultipart('alternative')
     message.set_charset('utf8')
     message['From'] = sender
     message['To'] = receiver
@@ -68,6 +68,8 @@ def send_mail(title, pubDate, content, link):
     message['Date'] = pubDate
     body = f'{content}\n\nRead on website:\n  {link}'
     message.attach(MIMEText(body.encode('utf-8'), 'plain', 'UTF-8'))
+    html_body = f'{html_content}\n\n<p><a href="{link}">Read on website</a></p>'
+    message.attach(MIMEText(html_body.encode('utf-8'), 'html', 'UTF-8'))
 
     session = smtplib.SMTP(host)
     session.starttls()
@@ -85,7 +87,8 @@ def main():
         link = get_text(item, 'link')
         pubDate = get_text(item, 'pubDate')
         guid = get_text(item, 'guid')
-        content = html2text(get_text(item, 'content:encoded')).strip()
+        html_content = get_text(item, 'content:encoded')
+        content = html2text(html_content).strip()
 
         # skip message if we have already sent it before
         if guid in processed:
@@ -96,7 +99,7 @@ def main():
         print_post(title, link, pubDate, guid, content)
 
         # send mail
-        send_mail(title, pubDate, content, link)
+        send_mail(title, pubDate, content, html_content, link)
 
         # save guid so we do not send the same message twice
         update_processed(guid)
