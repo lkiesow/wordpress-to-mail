@@ -17,7 +17,7 @@ feed_address = os.environ['FEED_ADDRESS']
 sender = os.environ['MAIL_SENDER']
 receiver = os.environ['MAIL_RECEIVER']
 host = os.environ['MAIL_HOST']
-password = os.environ['MAIL_PASSWORD']
+password = os.environ.get('MAIL_PASSWORD')
 send_one = int(os.environ['SEND_ONE'])
 
 
@@ -71,7 +71,8 @@ def send_mail(title, pubDate, content, link):
 
     session = smtplib.SMTP(host)
     session.starttls()
-    session.login(sender, password)
+    if password:
+        session.login(sender, password)
     session.sendmail(sender, [receiver], message.as_string())
     session.quit()
     print(f'`{title}` sent to {receiver}')
