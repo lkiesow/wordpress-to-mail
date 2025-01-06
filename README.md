@@ -23,6 +23,19 @@ export SEND_ONE=1
 ./wordpress-to-mail
 ```
 
+In addition to sending e-mails,
+you can also send Matrix messages:
+
+```
+...
+# Matrix
+export MATRIX_HOST=https://matrix.org
+export MATRIX_TOKEN=syt_...sby
+export MATRIX_ROOM='!yaas...dwq:matrix.org'
+
+./wordpress-to-mail
+```
+
 Already processed posts are stored in `processed.yml` to avoid sending them twice:
 
 ```yml

@@ -4,6 +4,7 @@ import requests
 import smtplib
 import yaml
 import os
+import re
 import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -19,6 +20,10 @@ receiver = os.environ['MAIL_RECEIVER']
 host = os.environ['MAIL_HOST']
 password = os.environ.get('MAIL_PASSWORD')
 send_one = int(os.environ['SEND_ONE'])
+# Matrix
+matrix_host = os.environ.get('MATRIX_HOST')
+matrix_room = os.environ.get('MATRIX_ROOM')
+matrix_token = os.environ.get('MATRIX_TOKEN')
 
 
 def get_text(node, tag):
@@ -59,6 +64,30 @@ def print_post(title, link, pubDate, guid, content):
     print()
 
 
+def send_matrix_message(title, html_description, link):
+    if not matrix_host:
+        return
+    matrix_url = f'{matrix_host}/_matrix/client/v3/rooms/{matrix_room}/send/m.room.message'
+    headers = { 'Authorization': f'Bearer {matrix_token}', }
+    message = f'{title}\n{link}'
+    formatted_message = f'''
+        <h3>ℹ️  <a href="{link}">{title}</a></h3>
+        <p>
+        {html_description}
+        '''
+    search_regex = r'<span[^>]*screen-reader-text[^>]*>[^<]*</span>'
+    formatted_message = re.sub(search_regex, '', formatted_message)
+    payload = {
+        "msgtype": "m.text",
+        "body": message,
+        'format': 'org.matrix.custom.html',
+        'formatted_body': formatted_message
+        }
+    response = requests.post(matrix_url, headers=headers, json=payload)
+    response.raise_for_status()
+    print('Matrix message sent successfully!')
+
+
 def send_mail(title, pubDate, content, html_content, link):
     message = MIMEMultipart('alternative')
     message.set_charset('utf8')
@@ -87,6 +116,8 @@ def main():
         link = get_text(item, 'link')
         pubDate = get_text(item, 'pubDate')
         guid = get_text(item, 'guid')
+        html_description = get_text(item, 'description')
+        description = html2text(html_description).strip()
         html_content = get_text(item, 'content:encoded')
         content = html2text(html_content).strip()
 
@@ -100,6 +131,9 @@ def main():
 
         # send mail
         send_mail(title, pubDate, content, html_content, link)
+
+        # send matrix message
+        send_matrix_message(title, html_description, link)
 
         # save guid so we do not send the same message twice
         update_processed(guid)
