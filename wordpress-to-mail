@@ -110,6 +110,7 @@ def send_mail(title, pubDate, content, html_content, link):
 
 
 def main():
+    print('Version 2025-01-22')
     load_processed()
     for item in get_feed_items():
         title = get_text(item, 'title')
@@ -132,11 +133,15 @@ def main():
         # send mail
         send_mail(title, pubDate, content, html_content, link)
 
-        # send matrix message
-        send_matrix_message(title, html_description, link)
-
         # save guid so we do not send the same message twice
+        # doing this early means that we may loose the matrix message, but at least we do not start spamming mails
         update_processed(guid)
+
+        # send matrix message
+        try:
+            send_matrix_message(title, html_description, link)
+        except:
+            pass
 
         if send_one:
             break
